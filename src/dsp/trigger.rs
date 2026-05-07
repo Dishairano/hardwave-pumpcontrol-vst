@@ -162,6 +162,14 @@ impl TriggerEngine {
         sc_level: f32,
         sc_threshold_lin: f32,
     ) -> f32 {
+        // Transport stopped: hold phase at its last position. Matches the
+        // convention used by ShaperBox / LFOTool / Kickstart — a paused DAW
+        // freezes the playhead in every trigger mode, including Free.
+        if !self.playing {
+            let out = (self.phase as f32 + phase_offset) % 1.0;
+            return out.clamp(0.0, 1.0);
+        }
+
         match mode {
             TriggerMode::Internal => {
                 if sync_rate == SyncRate::Free {
@@ -169,19 +177,11 @@ impl TriggerEngine {
                     if self.phase >= 1.0 {
                         self.phase -= 1.0;
                     }
-                } else if self.playing {
+                } else {
                     let beats_per_cycle = sync_rate.to_beats();
                     self.phase = (self.pos_beats % beats_per_cycle) / beats_per_cycle;
                     // Advance pos_beats by 1 sample
                     self.pos_beats += self.tempo / 60.0 / self.sample_rate;
-                } else {
-                    // Not playing: free-run at tempo
-                    let beats_per_cycle = sync_rate.to_beats();
-                    let phase_inc = self.tempo / 60.0 / self.sample_rate / beats_per_cycle;
-                    self.phase += phase_inc;
-                    if self.phase >= 1.0 {
-                        self.phase -= 1.0;
-                    }
                 }
             }
             TriggerMode::Sidechain => {
