@@ -3,7 +3,7 @@ members = ["xtask"]
 
 [package]
 name = "hardwave-pumpcontrol"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "Proprietary"
 description = "Hardwave PumpControl — sidechain / volume shaper VST3/CLAP plugin by Hardwave Studios"
