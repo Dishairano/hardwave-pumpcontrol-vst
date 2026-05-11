@@ -39,6 +39,8 @@ fn crash_pending_path() -> std::path::PathBuf {
     hardwave_data_dir().join("pumpcontrol-crash-pending")
 }
 
+mod crash_reporter;
+
 fn install_crash_handler() {
     use std::sync::Once;
     static INIT: Once = Once::new();
@@ -126,6 +128,7 @@ struct HardwavePumpControl {
 impl Default for HardwavePumpControl {
     fn default() -> Self {
         install_crash_handler();
+        crash_reporter::install("pumpcontrol");
 
         let sr = 44100.0;
         let (pkt_tx, pkt_rx) = crossbeam_channel::bounded(4);
