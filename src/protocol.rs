@@ -48,6 +48,11 @@ pub struct PumpPacket {
 /// JS -> Rust messages from the webview.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
+/// NOTE: nothing deserializes into this. `editor.rs` reads the webview's
+/// messages as `serde_json::Value` and matches on the `type` field by hand, so
+/// this enum documents the protocol rather than enforcing it. Worth wiring up:
+/// it would turn a typo in a message name into a compile error.
+#[allow(dead_code)]
 pub enum UiMessage {
     #[serde(rename = "set_param")]
     SetParam { id: String, value: f64 },

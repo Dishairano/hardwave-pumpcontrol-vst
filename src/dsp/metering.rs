@@ -35,6 +35,8 @@ impl PeakMeter {
         (lin_to_db(self.peak_l), lin_to_db(self.peak_r))
     }
 
+    /// Unused: the UI wants decibels, and `peak_db` is what it asks for.
+    #[allow(dead_code)]
     pub fn peak_linear(&self) -> (f32, f32) {
         (self.peak_l, self.peak_r)
     }

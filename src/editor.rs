@@ -55,6 +55,12 @@ use crate::params::PumpControlParams;
 use crate::presets;
 use crate::protocol::PumpPacket;
 
+/// The editor's window size, shared with whatever is driving the webview.
+type EditorSize = Arc<Mutex<(u32, u32)>>;
+/// Resize notifications back to the host side of the editor. `Option` because
+/// the sender is taken once the window is gone.
+type ResizeTx = Arc<Mutex<Option<Sender<(u32, u32)>>>>;
+
 const PUMPCONTROL_URL: &str = "https://pumpcontrol.hardwavestudios.com/vst/pumpcontrol";
 const EDITOR_WIDTH: u32 = 900;
 const EDITOR_HEIGHT: u32 = 560;
@@ -240,8 +246,8 @@ fn handle_ipc(
     curve_data: &Arc<Mutex<CurveData>>,
     raw_body: &str,
     _parent_hwnd: usize,
-    editor_size: &Arc<Mutex<(u32, u32)>>,
-    resize_tx: &Arc<Mutex<Option<Sender<(u32, u32)>>>>,
+    editor_size: &EditorSize,
+    resize_tx: &ResizeTx,
 ) {
     let msg: serde_json::Value = match serde_json::from_str(raw_body) {
         Ok(v) => v,
@@ -286,7 +292,7 @@ fn handle_ipc(
         "resize" => {
             let w = msg.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
             let h = msg.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-            if w >= MIN_WIDTH && w <= MAX_WIDTH && h >= MIN_HEIGHT && h <= MAX_HEIGHT {
+            if (MIN_WIDTH..=MAX_WIDTH).contains(&w) && (MIN_HEIGHT..=MAX_HEIGHT).contains(&h) {
                 *editor_size.lock() = (w, h);
                 if context.request_resize() {
                     if let Some(tx) = resize_tx.lock().as_ref() {
@@ -312,8 +318,8 @@ pub struct PumpEditor {
     packet_rx: Arc<Mutex<Receiver<PumpPacket>>>,
     auth_token: Option<String>,
     scale_factor: Mutex<f32>,
-    editor_size: Arc<Mutex<(u32, u32)>>,
-    resize_tx: Arc<Mutex<Option<Sender<(u32, u32)>>>>,
+    editor_size: EditorSize,
+    resize_tx: ResizeTx,
     /// Process-unique instance ID for the per-instance WebView2 dir.
     instance_id: String,
 }
@@ -453,8 +459,8 @@ fn spawn_windows(
     curve_data: Arc<Mutex<CurveData>>,
     base_init_js: String,
     resize_rx: Receiver<(u32, u32)>,
-    editor_size: Arc<Mutex<(u32, u32)>>,
-    resize_tx: Arc<Mutex<Option<Sender<(u32, u32)>>>>,
+    editor_size: EditorSize,
+    resize_tx: ResizeTx,
     instance_id: String,
 ) -> Box<dyn std::any::Any + Send> {
     use std::io::{Read as IoRead, Write as IoWrite};
@@ -586,6 +592,8 @@ fn spawn_windows(
 // ─── Linux / macOS: evaluate_script approach ───────────────────────────────
 
 #[cfg(not(target_os = "windows"))]
+// Each argument is a distinct piece of window state the platform thread needs.
+#[allow(clippy::too_many_arguments)]
 fn spawn_unix(
     raw_handle: usize,
     url: String,
@@ -597,8 +605,8 @@ fn spawn_unix(
     curve_data: Arc<Mutex<CurveData>>,
     init_js: String,
     resize_rx: Receiver<(u32, u32)>,
-    editor_size: Arc<Mutex<(u32, u32)>>,
-    resize_tx: Arc<Mutex<Option<Sender<(u32, u32)>>>>,
+    editor_size: EditorSize,
+    resize_tx: ResizeTx,
     instance_id: String,
 ) -> Box<dyn std::any::Any + Send> {
     let shutdown = Arc::new(ShutdownSignal::new());
@@ -626,7 +634,7 @@ fn spawn_unix(
             .with_url(&url)
             .with_initialization_script(&init_js)
             .with_ipc_handler(move |msg| {
-                handle_ipc(&ctx, &pmap, &cdata, &msg.body(), raw_handle, &esize, &rtx);
+                handle_ipc(&ctx, &pmap, &cdata, msg.body(), raw_handle, &esize, &rtx);
             })
             .with_bounds(wry::Rect {
                 position: wry::dpi::Position::Logical(wry::dpi::LogicalPosition::new(0.0, 0.0)),

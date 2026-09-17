@@ -78,7 +78,7 @@ fn install_crash_handler() {
                 let _ = writeln!(f, "Arch:     {}", std::env::consts::ARCH);
                 let _ = writeln!(f, "Location: {}", location);
                 let _ = writeln!(f, "Message:  {}", payload);
-                let _ = writeln!(f, "");
+                let _ = writeln!(f);
                 let _ = writeln!(f, "Backtrace:");
                 let _ = writeln!(f, "{}", bt);
                 let _ = writeln!(f, "========================================");

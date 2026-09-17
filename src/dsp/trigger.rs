@@ -67,6 +67,8 @@ impl SyncRate {
         }
     }
 
+    /// Unused in Rust: the webview prints its own division labels.
+    #[allow(dead_code)]
     pub fn label(self) -> &'static str {
         match self {
             Self::Sixteenth => "1/16",

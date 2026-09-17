@@ -4,6 +4,8 @@ use crate::dsp::envelope::{CurveData, CurvePoint};
 
 pub struct Preset {
     pub name: &'static str,
+    /// Written but never read: the webview groups presets by its own list.
+    #[allow(dead_code)]
     pub category: &'static str,
     pub curve: CurveData,
 }
