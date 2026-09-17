@@ -249,17 +249,17 @@ fn handle_ipc(
     editor_size: &EditorSize,
     resize_tx: &ResizeTx,
 ) {
-    let msg: serde_json::Value = match serde_json::from_str(raw_body) {
-        Ok(v) => v,
+    // Parse into the protocol enum, not a loose Value: an unknown `type` or a
+    // missing field fails here rather than being quietly dropped in a match arm.
+    let msg: crate::protocol::UiMessage = match serde_json::from_str(raw_body) {
+        Ok(m) => m,
         Err(_) => return,
     };
 
-    let msg_type = msg.get("type").and_then(|t| t.as_str()).unwrap_or("");
-    match msg_type {
-        "set_param" => {
-            let id = msg.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            let value = msg.get("value").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            if let Some(ptr) = param_map.get(id) {
+    use crate::protocol::UiMessage;
+    match msg {
+        UiMessage::SetParam { id, value } => {
+            if let Some(ptr) = param_map.get(&id) {
                 unsafe {
                     let normalized = ptr.preview_normalized(value as f32);
                     context.raw_begin_set_parameter(*ptr);
@@ -268,48 +268,37 @@ fn handle_ipc(
                 }
             }
         }
-        "set_curve" => {
-            if let Some(points_val) = msg.get("points") {
-                if let Ok(points) = serde_json::from_value::<Vec<crate::dsp::envelope::CurvePoint>>(points_val.clone()) {
-                    *curve_data.lock() = CurveData { points };
-                }
+        UiMessage::SetCurve { points } => {
+            *curve_data.lock() = CurveData { points };
+        }
+        UiMessage::LoadPreset { name } => {
+            if let Some(curve) = presets::load_preset(&name) {
+                *curve_data.lock() = curve;
             }
         }
-        "load_preset" => {
-            if let Some(name) = msg.get("name").and_then(|v| v.as_str()) {
-                if let Some(curve) = presets::load_preset(name) {
-                    *curve_data.lock() = curve;
-                }
-            }
-        }
-        "release_focus" => {
+        UiMessage::ReleaseFocus => {
             #[cfg(target_os = "windows")]
             unsafe {
                 use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus;
                 SetFocus(_parent_hwnd as windows_sys::Win32::Foundation::HWND);
             }
         }
-        "resize" => {
-            let w = msg.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-            let h = msg.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-            if (MIN_WIDTH..=MAX_WIDTH).contains(&w) && (MIN_HEIGHT..=MAX_HEIGHT).contains(&h) {
-                *editor_size.lock() = (w, h);
+        UiMessage::Resize { width, height } => {
+            if (MIN_WIDTH..=MAX_WIDTH).contains(&width) && (MIN_HEIGHT..=MAX_HEIGHT).contains(&height) {
+                *editor_size.lock() = (width, height);
                 if context.request_resize() {
                     if let Some(tx) = resize_tx.lock().as_ref() {
-                        let _ = tx.send((w, h));
+                        let _ = tx.send((width, height));
                     }
                 }
             }
         }
-        "save_token" => {
-            if let Some(token) = msg.get("token").and_then(|v| v.as_str()) {
-                let _ = auth::save_token(token);
-            }
+        UiMessage::SaveToken { token } => {
+            let _ = auth::save_token(&token);
         }
-        "clear_token" => {
+        UiMessage::ClearToken => {
             let _ = auth::clear_token();
         }
-        _ => {}
     }
 }
 

@@ -46,13 +46,14 @@ pub struct PumpPacket {
 }
 
 /// JS -> Rust messages from the webview.
+///
+/// This is the whole protocol. `editor.rs` deserializes into it, so a message
+/// the webview sends that is not listed here fails to parse instead of being
+/// silently ignored, and a field renamed on one side breaks the build on the
+/// other. It used to be matched by hand on a `serde_json::Value`, which meant
+/// three of these variants were missing and nobody noticed.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
-/// NOTE: nothing deserializes into this. `editor.rs` reads the webview's
-/// messages as `serde_json::Value` and matches on the `type` field by hand, so
-/// this enum documents the protocol rather than enforcing it. Worth wiring up:
-/// it would turn a typo in a message name into a compile error.
-#[allow(dead_code)]
 pub enum UiMessage {
     #[serde(rename = "set_param")]
     SetParam { id: String, value: f64 },
@@ -65,4 +66,42 @@ pub enum UiMessage {
 
     #[serde(rename = "release_focus")]
     ReleaseFocus,
+
+    #[serde(rename = "resize")]
+    Resize { width: u32, height: u32 },
+
+    #[serde(rename = "save_token")]
+    SaveToken { token: String },
+
+    #[serde(rename = "clear_token")]
+    ClearToken,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UiMessage;
+
+    /// Exactly the payloads the shipped webview sends, taken from the served
+    /// index.html. A rename on either side fails here instead of in a DAW.
+    #[test]
+    fn parses_every_message_the_ui_sends() {
+        let cases = [
+            r#"{"type":"set_param","id":"depth","value":0.75}"#,
+            r#"{"type":"set_curve","points":[{"x":0,"y":1,"tension":0},{"x":0.6,"y":0.85,"tension":-0.3}]}"#,
+            r#"{"type":"load_preset","name":"Hardstyle"}"#,
+            r#"{"type":"save_token","token":"pending"}"#,
+            r#"{"type":"clear_token"}"#,
+            r#"{"type":"release_focus"}"#,
+            r#"{"type":"resize","width":900,"height":600}"#,
+        ];
+        for raw in cases {
+            serde_json::from_str::<UiMessage>(raw).unwrap_or_else(|e| panic!("{raw}: {e}"));
+        }
+    }
+
+    #[test]
+    fn refuses_what_it_does_not_know() {
+        assert!(serde_json::from_str::<UiMessage>(r#"{"type":"set_parm","id":"a","value":1}"#).is_err());
+        assert!(serde_json::from_str::<UiMessage>(r#"{"type":"set_param","id":"a"}"#).is_err());
+    }
 }
